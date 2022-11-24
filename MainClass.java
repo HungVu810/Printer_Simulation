@@ -46,22 +46,10 @@ class Printer
 	void print(StringBuffer data) throws InterruptedException, IOException
 	{
 		Thread.sleep(2750);
-		FileWriter fileWriter = new FileWriter("PRINT" + id);
+		FileWriter fileWriter = new FileWriter("PRINTER" + id);
 		PrintWriter printWriter = new PrintWriter(fileWriter);
-	}
-}
-
-class PrintJobThread
-	extends Thread
-{
-	StringBuffer line = new StringBuffer(); // only allowed one line to reuse for read from disk and print to printer
-
-	PrintJobThread(String fileToPrint)
-	{
-	}
-
-	public void run()
-	{
+		printWriter.println(data);
+		printWriter.close();
 	}
 }
 
@@ -74,37 +62,111 @@ class FileInfo
 
 class DirectoryManager
 {
-	// private Hashtable<String, FileInfo> T = new Hashtable<String, FileInfo>();
+	private Hashtable<String, FileInfo> fileMap = new Hashtable<String, FileInfo>();
 
-	DirectoryManager()
+	DirectoryManager() {}
+
+	void enter(String fileName, FileInfo file)
 	{
+		fileMap.putIfAbsent(fileName, file);
 	}
 
-	void enter(StringBuffer fileName, FileInfo file)
+	FileInfo lookup(String fileName)
 	{
-	}
-
-	FileInfo lookup(StringBuffer fileName)
-	{
-		return null;
+		return fileMap.get(fileName); // can return null
 	}
 }
 
-class ResourceManager
-{
+class ResourceManager {
+	boolean isFree[];
+	ResourceManager(int numberOfItems) {
+		isFree = new boolean[numberOfItems];
+		for (int i=0; i<isFree.length; ++i)
+			isFree[i] = true;
+	}
+	synchronized int request() {
+		while (true) {
+			for (int i = 0; i < isFree.length; ++i)
+				if ( isFree[i] ) {
+					isFree[i] = false;
+					return i;
+				}
+			this.wait(); // block until someone releases Resource
+		}
+	}
+	synchronized void release( int index ) {
+		isFree[index] = true;
+		this.notify(); // let a blocked thread run
+	}
 }
 
-class DiskManager
+class DiskManager extends ResourceManager
 {
+	Disk disks[];
+	int freeSector[]; // the current free sector index
+	DiskManager(int numberOfItems)
+	{
+		super(numberOfItems);
+		disks = new Disk[numberOfItems];
+		freeSector = new int[numberOfItems];
+		for (int i = 0; i < numberOfItems; i++)
+		{
+			disks[i] = new Disk();
+			freeSector[i] = 0;
+		}
+	}
+	FileInfo createFileInfo(int diskFree, int fileLength) // diskFree is obtained with request()
+	{
+		FileInfo finfo = new FileInfo();
+		finfo.startingSector = diskFree;
+		finfo.startingSector = freeSector[diskFree];
+		finfo.fileLength = fileLength;
+		freeSector[diskFree] += fileLength;
+		return finfo;
+	}
 }
 
-class PrinterManager
+class PrinterManager extends ResourceManager
 {
+	Printer printers[];
+	PrinterManager(int numberOfItems)
+	{
+		PrinterManager
+	}
+}
+
+class PrintJobThread
+	extends Thread
+{
+	static DiskManager diskMan;
+	static PrinterManager printMan;
+	StringBuffer line = new StringBuffer(); // only allowed one line to reuse for read from disk and print to printer
+	String fileName = new String();
+
+	PrintJobThread(String fileToPrint)
+	{
+		fileName = fileToPrint;
+	}
+
+	public void run()
+	{
+		try
+		{
+			process();
+		}
+		catch()
+		{
+		}
+	}
+	
+	void process()
+	{
+	}
 }
 
 class UserThread
 	extends Thread
-{
+d
 	UserThread(int id) // my commands come from an input file with name USERi where i is my user id
 	{
 	}
