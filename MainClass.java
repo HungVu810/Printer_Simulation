@@ -1,9 +1,11 @@
 import java.io.*;
 import java.util.*;
 
+/* rm PRINTER* && javac MainClass.java && java MainClass -1 -1 -1 */
+// Know when to use join() properly, otherwise it will prevent concurrency
 public class MainClass
 {
-	public static void main(String args[])
+	public static void main(String args[]) throws InterruptedException
 	{
 		int users = 0,
 			disks = 0,
@@ -37,6 +39,7 @@ public class MainClass
 		{
 			userThreads[i] = new UserThread(i);
 			userThreads[i].start();
+			/* userThreads[i].join(); */ 
 		}
 	}
 }
@@ -55,14 +58,14 @@ class Disk
 	}
 	void write(int sector, StringBuffer data) throws InterruptedException
 	{
-		Thread.sleep(800);
+		/* Thread.sleep(800); */
 		System.out.println("Writing to sector: " + data);
 		sectors[sector].setLength(0);
 		sectors[sector].append(data);
 	}
 	void read(int sector, StringBuffer data) throws InterruptedException
 	{
-		Thread.sleep(800);
+		/* Thread.sleep(800); */
 		data.setLength(0);
 		data.append(sectors[sector]);
 		System.out.println("Read from sector: " + data);
@@ -79,8 +82,8 @@ class Printer
 
 	void print(StringBuffer data) throws InterruptedException, IOException
 	{
-		Thread.sleep(2750);
-		FileWriter fileWriter = new FileWriter("PRINTER" + id);
+		/* Thread.sleep(2750); */
+		FileWriter fileWriter = new FileWriter("PRINTER" + id, true); // true for appending mode
 		PrintWriter printWriter = new PrintWriter(fileWriter);
 		printWriter.println(data);
 		System.out.println("PRINTER" + id + " printed: " + data);
@@ -103,14 +106,11 @@ class DirectoryManager
 
 	void enter(StringBuffer fileName, FileInfo file) // fileName has to be a StringBuffer since we want to modify it in the UserThread's processLine()
 	{
-		System.out.printf("fileMap: %s\n", fileName);
 		fileMap.putIfAbsent(fileName.toString(), file);
 	}
 
 	FileInfo lookup(StringBuffer fileName)
 	{
-		FileInfo finfo = fileMap.get(fileName.toString());
-		System.out.println(finfo.diskNumber);
 		return fileMap.get(fileName.toString()); // can return null
 	}
 }
@@ -214,21 +214,15 @@ class PrintJobThread extends Thread
 	
 	void process() throws IOException, InterruptedException
 	{
-		System.out.println("lookup " + fileName);
 		FileInfo finfo = dirMan.lookup(fileName);
-		if (finfo == null)
-		{
-			System.out.println("failed");
-			return;
-		}
-			System.out.println("requesting");
+		if (finfo == null) return;
 		int freePrinter = printMan.request();
-			System.out.println("requested");
 		for (int i = 0; i < finfo.fileLength; i++)
 		{
 			diskMan.disks[finfo.diskNumber].read(finfo.startingSector + i, line);
 			printMan.printers[freePrinter].print(line);
 		}
+		printMan.release(freePrinter);
 	}
 }
 
@@ -274,6 +268,7 @@ class UserThread extends Thread
 	
 	void processLine(String line, StringBuffer fileName, ArrayList<StringBuffer> fdata) throws InterruptedException
 	{
+		System.out.println("Processing " + line);
 		StringTokenizer tokLine = new StringTokenizer(line);
 		String token = tokLine.nextToken();
 		if (token.equals(".save"))
@@ -291,12 +286,14 @@ class UserThread extends Thread
 			{
 				diskMan.disks[freeDisk].write(finfo.startingSector + i, fdata.get(i));
 			}
+			diskMan.release(freeDisk);
 			fdata.clear(); // clear for the next line
 		}
 		else if (token.equals(".print"))
 		{
 			PrintJobThread printJob = new PrintJobThread(new StringBuffer(tokLine.nextToken())); // use nextToken() to extract the virtual fileName
 			printJob.start(); // start running concurrently
+			/* printJob.join(); */
 		}
 		else // fileName's body
 		{
