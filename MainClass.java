@@ -16,9 +16,9 @@ public class MainClass
 		{
 			return;
 		}
-		users = Integer.valueOf(args[0].substring(1, args[0].length() - 1));
-		disks = Integer.valueOf(args[1].substring(1, args[0].length() - 1));
-		printers = Integer.valueOf(args[2].substring(1, args[0].length() - 1));
+		users = Integer.valueOf(args[0].substring(1, args[0].length()));
+		disks = Integer.valueOf(args[1].substring(1, args[1].length()));
+		printers = Integer.valueOf(args[2].substring(1, args[2].length()));
 		
 		DiskManager diskMan = new DiskManager(disks);
 		PrinterManager printMan = new PrinterManager(printers);
@@ -56,6 +56,7 @@ class Disk
 	void write(int sector, StringBuffer data) throws InterruptedException
 	{
 		Thread.sleep(800);
+		System.out.println("Writing to sector: " + data);
 		sectors[sector].setLength(0);
 		sectors[sector].append(data);
 	}
@@ -64,6 +65,7 @@ class Disk
 		Thread.sleep(800);
 		data.setLength(0);
 		data.append(sectors[sector]);
+		System.out.println("Read from sector: " + data);
 	}
 }
 
@@ -81,6 +83,7 @@ class Printer
 		FileWriter fileWriter = new FileWriter("PRINTER" + id);
 		PrintWriter printWriter = new PrintWriter(fileWriter);
 		printWriter.println(data);
+		System.out.println("PRINTER" + id + " printed: " + data);
 		printWriter.close();
 	}
 }
@@ -94,18 +97,21 @@ class FileInfo
 
 class DirectoryManager
 {
-	private Hashtable<StringBuffer, FileInfo> fileMap = new Hashtable<StringBuffer, FileInfo>();
+	private Hashtable<String, FileInfo> fileMap = new Hashtable<String, FileInfo>();
 
 	DirectoryManager() {}
 
 	void enter(StringBuffer fileName, FileInfo file) // fileName has to be a StringBuffer since we want to modify it in the UserThread's processLine()
 	{
-		fileMap.putIfAbsent(fileName, file);
+		System.out.printf("fileMap: %s\n", fileName);
+		fileMap.putIfAbsent(fileName.toString(), file);
 	}
 
 	FileInfo lookup(StringBuffer fileName)
 	{
-		return fileMap.get(fileName); // can return null
+		FileInfo finfo = fileMap.get(fileName.toString());
+		System.out.println(finfo.diskNumber);
+		return fileMap.get(fileName.toString()); // can return null
 	}
 }
 
@@ -150,8 +156,12 @@ class DiskManager extends ResourceManager
 	}
 	FileInfo createFileInfo(int diskFree, int fileLength) // diskFree is obtained with request()
 	{
+		if (freeSector[diskFree] + fileLength >= Disk.NUM_SECTORS)
+		{
+			return null;
+		}
 		FileInfo finfo = new FileInfo();
-		finfo.startingSector = diskFree;
+		finfo.diskNumber = diskFree;
 		finfo.startingSector = freeSector[diskFree];
 		finfo.fileLength = fileLength;
 		freeSector[diskFree] += fileLength;
@@ -204,9 +214,16 @@ class PrintJobThread extends Thread
 	
 	void process() throws IOException, InterruptedException
 	{
+		System.out.println("lookup " + fileName);
 		FileInfo finfo = dirMan.lookup(fileName);
-		if (finfo == null) return;
+		if (finfo == null)
+		{
+			System.out.println("failed");
+			return;
+		}
+			System.out.println("requesting");
 		int freePrinter = printMan.request();
+			System.out.println("requested");
 		for (int i = 0; i < finfo.fileLength; i++)
 		{
 			diskMan.disks[finfo.diskNumber].read(finfo.startingSector + i, line);
@@ -269,6 +286,7 @@ class UserThread extends Thread
 			int freeDisk = diskMan.request();
 			FileInfo finfo = diskMan.createFileInfo(freeDisk, fdata.size());
 			if (finfo == null) return;
+			dirMan.enter(fileName, finfo);
 			for (int i = 0; i < finfo.fileLength; i++)
 			{
 				diskMan.disks[freeDisk].write(finfo.startingSector + i, fdata.get(i));
