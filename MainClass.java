@@ -5,7 +5,39 @@ public class MainClass
 {
 	public static void main(String args[])
 	{
+		int users = 0,
+			disks = 0,
+			printers = 0;
 		
+		if (args.length != 3
+			|| args[0].length() < 2
+			|| args[1].length() < 2
+			|| args[2].length() < 2)
+		{
+			return;
+		}
+		users = Integer.valueOf(args[0].substring(1, args[0].length() - 1));
+		disks = Integer.valueOf(args[1].substring(1, args[0].length() - 1));
+		printers = Integer.valueOf(args[2].substring(1, args[0].length() - 1));
+		
+		DiskManager diskMan = new DiskManager(disks);
+		PrinterManager printMan = new PrinterManager(printers);
+		DirectoryManager dirMan = new DirectoryManager();
+		
+		// assign statics
+		UserThread.dirMan = dirMan;
+		UserThread.diskMan = diskMan;
+		PrintJobThread.diskMan = diskMan;
+		PrintJobThread.dirMan = dirMan;
+		PrintJobThread.printMan = printMan;
+		
+		// init users
+		UserThread userThreads[] = new UserThread[users];
+		for (int i = 0; i < userThreads.length; i++)
+		{
+			userThreads[i] = new UserThread(i);
+			userThreads[i].start();
+		}
 	}
 }
 
@@ -16,9 +48,9 @@ class Disk
 	Disk()
 	{
 		sectors = new StringBuffer[NUM_SECTORS];
-		for(StringBuffer sector : sectors)
+		for(int i = 0; i < NUM_SECTORS; i++)
 		{
-			sector = new StringBuffer();
+			sectors[i] = new StringBuffer();
 		}
 	}
 	void write(int sector, StringBuffer data) throws InterruptedException
@@ -177,7 +209,8 @@ class PrintJobThread extends Thread
 		int freePrinter = printMan.request();
 		for (int i = 0; i < finfo.fileLength; i++)
 		{
-			printMan.printers[freePrinter].print(diskMan.disks[finfo.diskNumber].sectors[finfo.startingSector + i]);
+			diskMan.disks[finfo.diskNumber].read(finfo.startingSector + i, line);
+			printMan.printers[freePrinter].print(line);
 		}
 	}
 }
@@ -214,14 +247,15 @@ class UserThread extends Thread
 		File file = new File("USER" + id);
 		Scanner scanner = new Scanner(file);
 		StringBuffer fileName = new StringBuffer();
+		ArrayList<StringBuffer> fdata = new ArrayList<StringBuffer>();
 		while(scanner.hasNextLine())
 		{
-			processLine(scanner.nextLine(), fileName);
+			processLine(scanner.nextLine(), fileName, fdata);
 		}
 		scanner.close();
 	}
 	
-	void processLine(String line, StringBuffer fileName) throws InterruptedException
+	void processLine(String line, StringBuffer fileName, ArrayList<StringBuffer> fdata) throws InterruptedException
 	{
 		StringTokenizer tokLine = new StringTokenizer(line);
 		String token = tokLine.nextToken();
@@ -233,17 +267,13 @@ class UserThread extends Thread
 		else if (token.equals(".end"))
 		{
 			int freeDisk = diskMan.request();
-			diskMan.disks[freeDisk]
-				
-			FileInfo finfo = dirMan.lookup(fileName);
+			FileInfo finfo = diskMan.createFileInfo(freeDisk, fdata.size());
 			if (finfo == null) return;
-			int freePrinter = printMan.request();
 			for (int i = 0; i < finfo.fileLength; i++)
 			{
-				printMan.printers[freePrinter].print(diskMan.disks[finfo.diskNumber].sectors[finfo.startingSector + i]);
+				diskMan.disks[freeDisk].write(finfo.startingSector + i, fdata.get(i));
 			}
-				
-			
+			fdata.clear(); // clear for the next line
 		}
 		else if (token.equals(".print"))
 		{
@@ -252,7 +282,7 @@ class UserThread extends Thread
 		}
 		else // fileName's body
 		{
-			
+			fdata.add(new StringBuffer(line));
 		}
 	}
 }
