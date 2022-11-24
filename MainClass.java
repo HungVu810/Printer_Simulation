@@ -62,16 +62,16 @@ class FileInfo
 
 class DirectoryManager
 {
-	private Hashtable<String, FileInfo> fileMap = new Hashtable<String, FileInfo>();
+	private Hashtable<StringBuffer, FileInfo> fileMap = new Hashtable<StringBuffer, FileInfo>();
 
 	DirectoryManager() {}
 
-	void enter(String fileName, FileInfo file)
+	void enter(StringBuffer fileName, FileInfo file) // fileName has to be a StringBuffer since we want to modify it in the UserThread's processLine()
 	{
 		fileMap.putIfAbsent(fileName, file);
 	}
 
-	FileInfo lookup(String fileName)
+	FileInfo lookup(StringBuffer fileName)
 	{
 		return fileMap.get(fileName); // can return null
 	}
@@ -84,7 +84,8 @@ class ResourceManager {
 		for (int i=0; i<isFree.length; ++i)
 			isFree[i] = true;
 	}
-	synchronized int request() {
+	synchronized int request() throws InterruptedException
+	{
 		while (true) {
 			for (int i = 0; i < isFree.length; ++i)
 				if ( isFree[i] ) {
@@ -131,19 +132,24 @@ class PrinterManager extends ResourceManager
 	Printer printers[];
 	PrinterManager(int numberOfItems)
 	{
-		PrinterManager
+		super(numberOfItems);
+		printers = new Printer[numberOfItems];
+		for (int i = 0; i < numberOfItems; i++)
+		{
+			printers[i] = new Printer(i);
+		}
 	}
 }
 
-class PrintJobThread
-	extends Thread
+class PrintJobThread extends Thread
 {
 	static DiskManager diskMan;
+	static DirectoryManager dirMan;
 	static PrinterManager printMan;
 	StringBuffer line = new StringBuffer(); // only allowed one line to reuse for read from disk and print to printer
-	String fileName = new String();
+	StringBuffer fileName = new StringBuffer();
 
-	PrintJobThread(String fileToPrint)
+	PrintJobThread(StringBuffer fileToPrint)
 	{
 		fileName = fileToPrint;
 	}
@@ -154,26 +160,115 @@ class PrintJobThread
 		{
 			process();
 		}
-		catch()
+		catch(IOException except)
 		{
+			System.out.println(except.toString());
+		}
+		catch(InterruptedException except)
+		{
+			System.out.println(except.toString());
 		}
 	}
 	
-	void process()
+	void process() throws IOException, InterruptedException
 	{
+		FileInfo finfo = dirMan.lookup(fileName);
+		if (finfo == null) return;
+		int freePrinter = printMan.request();
+		for (int i = 0; i < finfo.fileLength; i++)
+		{
+			printMan.printers[freePrinter].print(diskMan.disks[finfo.diskNumber].sectors[finfo.startingSector + i]);
+		}
 	}
 }
 
-class UserThread
-	extends Thread
-d
-	UserThread(int id) // my commands come from an input file with name USERi where i is my user id
+class UserThread extends Thread
+{
+	static DiskManager diskMan;
+	static DirectoryManager dirMan;
+	int id;
+	
+	UserThread(int inID) // my commands come from an input file with name USERi where i is my user id
 	{
+		id = inID;
 	}
 
 	public void run()
 	{
+		try
+		{
+			process();
+		}
+		catch(FileNotFoundException except)
+		{
+			System.out.println(except.toString());
+		}
+		catch(InterruptedException except)
+		{
+			System.out.println(except.toString());
+		}
+	}
+	
+	void process() throws FileNotFoundException, InterruptedException
+	{
+		File file = new File("USER" + id);
+		Scanner scanner = new Scanner(file);
+		StringBuffer fileName = new StringBuffer();
+		while(scanner.hasNextLine())
+		{
+			processLine(scanner.nextLine(), fileName);
+		}
+		scanner.close();
+	}
+	
+	void processLine(String line, StringBuffer fileName) throws InterruptedException
+	{
+		StringTokenizer tokLine = new StringTokenizer(line);
+		String token = tokLine.nextToken();
+		if (token.equals(".save"))
+		{
+			fileName.setLength(0);
+			fileName.append(tokLine.nextToken()); // use nextToken() to extract the virtual fileName
+		}
+		else if (token.equals(".end"))
+		{
+			int freeDisk = diskMan.request();
+			diskMan.disks[freeDisk]
+				
+			FileInfo finfo = dirMan.lookup(fileName);
+			if (finfo == null) return;
+			int freePrinter = printMan.request();
+			for (int i = 0; i < finfo.fileLength; i++)
+			{
+				printMan.printers[freePrinter].print(diskMan.disks[finfo.diskNumber].sectors[finfo.startingSector + i]);
+			}
+				
+			
+		}
+		else if (token.equals(".print"))
+		{
+			PrintJobThread printJob = new PrintJobThread(new StringBuffer(tokLine.nextToken())); // use nextToken() to extract the virtual fileName
+			printJob.start(); // start running concurrently
+		}
+		else // fileName's body
+		{
+			
+		}
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
